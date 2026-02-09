@@ -19,10 +19,10 @@
 
 ```bash
 # 使用 g++ 编译
-g++ -g 1.cpp -o 1.exe
+g++ -g VALOSnake.cpp -o VALOSnake.exe
 
 # 运行
-./1.exe
+./VALOSnake.exe
 ```
 
 如果使用 VS Code 的任务（workspace 已配置），也可以直接使用任务 `C/C++: g++.exe 生成活动文件` 来编译并运行。
