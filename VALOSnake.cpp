@@ -49,6 +49,20 @@ struct Point {
     }
 };
 
+// 食物结构体，包含位置和生成时间
+struct Food {
+    Point position;
+    clock_t spawnTime;  // 食物生成的时间
+    
+    Food(const Point& pos = Point()) : position(pos) {
+        spawnTime = clock();  // 记录生成时间
+    }
+    
+    bool operator==(const Food& other) const {
+        return position == other.position;
+    }
+};
+
 // 角色枚举
 enum Role { NORMAL_ROLE, CLEAR_ROLE, REVIVE_ROLE };
 
@@ -56,7 +70,7 @@ enum Role { NORMAL_ROLE, CLEAR_ROLE, REVIVE_ROLE };
 class SnakeGame {
 private:
     vector<Point> snake;           // 蛇的身体
-    vector<Point> foods;           // 食物位置列表
+    vector<Food> foods;            // 食物列表（包含时间信息）
     Direction direction;            // 当前方向
     Direction nextDirection;        // 下一个方向
     bool gameOver;                  // 游戏是否结束
@@ -65,6 +79,7 @@ private:
     static const int MIN_FOODS = 3; // 最少食物数量
     static const int MAX_FOODS = 7; // 最多食物数量
     bool hintShown;                 // 是否已显示技能提示
+    clock_t lastUpdateTime;         // 上次更新时间
 
 public:
     Role role;                      // 角色
@@ -82,24 +97,8 @@ public:
         for (int i = 0; i < initialFoods; i++) {
             generateFood();
         }
-    }
-
-    // 天基光束：清除场上所有食物（不回复能量），每个食物 +10 分并增加长度
-    void clearSkill() {
-        int cnt = (int)foods.size();
-        if (cnt == 0) return;
-        score += 10 * cnt;
-        // 增加长度：复制尾部 cnt 次
-        for (int i = 0; i < cnt; i++) {
-            snake.push_back(snake.back());
-        }
-        foods.clear();
-        // 维持食物数量会在下一次 update 被触发时补充
-    }
-
-    // 再来三局：授予三次免死，每次碰撞（边界或自身）时消耗一次免死机会，允许玩家选择逃脱方向，上限为3次
-    void activateReviveSkill() {
-        reviveCount = 3;
+        
+        lastUpdateTime = clock();
     }
 
     // 生成食物
@@ -121,20 +120,25 @@ public:
             }
             
             // 检查食物是否与已有食物重合
-            for (const Point& p : foods) {
-                if (p == newFood) {
+            for (const Food& f : foods) {
+                if (f.position == newFood) {
                     validPosition = false;
                     break;
                 }
             }
         } while (!validPosition);
         
-        foods.push_back(newFood);
+        foods.push_back(Food(newFood));
+    }
+    
+    // 获取食物存在时间（秒）
+    double getFoodLifeTime(const Food& food) const {
+        return (double)(clock() - food.spawnTime) / CLOCKS_PER_SEC;
     }
     
     // 维持食物数量
     void maintainFoods() {
-        // 保证食物数量在 [MIN_FOODS, MAX_FOODS] 范围内，但允许随机波动
+        // 保证食物数量在 [MIN_FOODS, MAX_FOODS] 范围内
         if (foods.size() < MIN_FOODS) {
             int foodsToAdd = MIN_FOODS - foods.size();
             for (int i = 0; i < foodsToAdd; i++) generateFood();
@@ -143,9 +147,22 @@ public:
             if (foods.size() < MAX_FOODS && (rand() % 100) < 30) {
                 generateFood();
             }
-            // 偶尔减少（但不低于 MIN_FOODS）
-            if (foods.size() > MIN_FOODS && (rand() % 100) < 10) {
-                foods.erase(foods.begin() + rand() % foods.size());
+            
+            // 移除存在时间超过8秒的食物（但不低于 MIN_FOODS）
+            if (foods.size() > MIN_FOODS) {
+                // 首先收集可以移除的食物（存在时间超过8秒）
+                vector<size_t> oldFoodIndices;
+                for (size_t i = 0; i < foods.size(); i++) {
+                    if (getFoodLifeTime(foods[i]) >= 8.0) {
+                        oldFoodIndices.push_back(i);
+                    }
+                }
+                
+                // 如果有超过8秒的食物，随机移除一个（但不低于最小数量）
+                if (!oldFoodIndices.empty() && foods.size() > MIN_FOODS) {
+                    size_t idxToRemove = oldFoodIndices[rand() % oldFoodIndices.size()];
+                    foods.erase(foods.begin() + idxToRemove);
+                }
             }
         }
     }
@@ -251,7 +268,7 @@ public:
         // 检查是否吃到食物
         bool foodEaten = false;
         for (size_t i = 0; i < foods.size(); i++) {
-            if (newHead == foods[i]) {
+            if (newHead == foods[i].position) {
                 score += 10;
                 // 对于清屏/复苏角色，吃到食物回复一点能量
                 if (role == CLEAR_ROLE || role == REVIVE_ROLE) energy++;
@@ -267,6 +284,26 @@ public:
         
         // 维持食物数量
         maintainFoods();
+        
+        lastUpdateTime = clock();
+    }
+
+    // 天基光束：清除场上所有食物（不回复能量），每个食物 +10 分并增加长度
+    void clearSkill() {
+        int cnt = (int)foods.size();
+        if (cnt == 0) return;
+        score += 10 * cnt;
+        // 增加长度：复制尾部 cnt 次
+        for (int i = 0; i < cnt; i++) {
+            snake.push_back(snake.back());
+        }
+        foods.clear();
+        // 维持食物数量会在下一次 update 被触发时补充
+    }
+
+    // 再来三局：授予三次免死，每次碰撞（边界或自身）时消耗一次免死机会，允许玩家选择逃脱方向，上限为3次
+    void activateReviveSkill() {
+        reviveCount = 3;
     }
 
     // 处理键盘输入
@@ -346,9 +383,9 @@ public:
             }
         }
         
-        // 绘制所有食物
-        for (const Point& food : foods) {
-            board[food.y][food.x] = '*';
+        // 绘制所有食物（显示存在时间）
+        for (const Food& food : foods) {
+            board[food.position.y][food.position.x] = '*';
         }
         
         // 绘制蛇头
@@ -374,6 +411,17 @@ public:
         string status = string("蛇长: ") + to_string((int)snake.size()) + string(" | 食物数: ") + to_string((int)foods.size());
         cout << status << string(max(0, 60 - (int)status.size()), ' ') << endl;
 
+        // 显示食物存在时间（可选，用于调试）
+        if (!foods.empty()) {
+            double minLifeTime = 8.0; // 初始化一个较大的值
+            for (const Food& food : foods) {
+                double lifeTime = getFoodLifeTime(food);
+                if (lifeTime < minLifeTime) minLifeTime = lifeTime;
+            }
+            string timeInfo = string("最旧食物存在时间: ") + to_string((int)minLifeTime) + "秒";
+            cout << timeInfo << string(max(0, 60 - (int)timeInfo.size()), ' ') << endl;
+        }
+
         // 角色与能量行，构造为固定长度以避免残留字符
         string roleLine = string("角色: ");
         switch (role) {
@@ -396,7 +444,7 @@ public:
             }
             cout << skillLine << string(max(0, 60 - (int)skillLine.size()), ' ') << endl;
 
-        // 控制行：始终显示，放在技能行之后
+        // 控制行：始终显示，放在技能行之后V
         string controlLine = "控制: W(上) S(下) A(左) D(右) 或 方向键 | ESC(退出)";
         cout << controlLine << string(max(0, 60 - (int)controlLine.size()), ' ') << endl;
         
@@ -580,7 +628,6 @@ int main() {
     cout << "     不要碰撞自身和边界\n";
     cout << "控制: W(上) S(下) A(左) D(右) 或 方向键 | ESC(退出)\n";
     cout << "技能: 按K键使用\n";
-    cout << "按任意键开始游戏...\n";
     system("pause");
     
     int highScore = 0;  // 记录历史最高分
