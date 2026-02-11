@@ -2,7 +2,7 @@
 
 这是一个基于控制台的贪吃蛇小游戏，支持角色解锁、积分商店与简单技能系统。
 
-**源码**: [1.cpp](1.cpp)
+**源码**: [VALOSnake.cpp](VALOSnake.cpp)
 
 **功能概览**
 - 基础贪吃蛇玩法：移动、吃食物、变长、避免碰撞。
@@ -19,10 +19,10 @@
 
 ```bash
 # 使用 g++ 编译
-g++ -g 1.cpp -o 1.exe
+g++ -g VALOSnake.cpp -o VALOSnake.exe
 
 # 运行
-./1.exe
+./VALOSnake.exe
 ```
 
 如果使用 VS Code 的任务（workspace 已配置），也可以直接使用任务 `C/C++: g++.exe 生成活动文件` 来编译并运行。
